@@ -12,7 +12,11 @@ if __name__ == "__main__":
     d = torch.load(args.original_ckpt, map_location="cpu")
 
     new_d = {"state_dict": {}}
-    ema_state = {k: v for k, v in d["state_dict"].items() if not k.startswith("model.diffusion_model")}
+    ema_state = {
+        k: v
+        for k, v in d["state_dict"].items()
+        if not k.startswith("model.diffusion_model")
+    }
     new_d["state_dict"] = ema_state
 
     print(f"saving to {args.output_path}")

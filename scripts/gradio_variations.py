@@ -17,11 +17,13 @@ from scripts.image_variations import load_model_from_config
 
 
 @torch.no_grad()
-def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale, ddim_eta):
-    precision_scope = autocast if precision=="autocast" else nullcontext
+def sample_model(
+    input_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale, ddim_eta
+):
+    precision_scope = autocast if precision == "autocast" else nullcontext
     with precision_scope("cuda"):
         with model.ema_scope():
-            c = model.get_learned_conditioning(input_im).tile(n_samples,1,1)
+            c = model.get_learned_conditioning(input_im).tile(n_samples, 1, 1)
 
             if scale != 1.0:
                 uc = torch.zeros_like(c)
@@ -29,15 +31,17 @@ def sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_sample
                 uc = None
 
             shape = [4, h // 8, w // 8]
-            samples_ddim, _ = sampler.sample(S=ddim_steps,
-                                             conditioning=c,
-                                             batch_size=n_samples,
-                                             shape=shape,
-                                             verbose=False,
-                                             unconditional_guidance_scale=scale,
-                                             unconditional_conditioning=uc,
-                                             eta=ddim_eta,
-                                             x_T=None)
+            samples_ddim, _ = sampler.sample(
+                S=ddim_steps,
+                conditioning=c,
+                batch_size=n_samples,
+                shape=shape,
+                verbose=False,
+                unconditional_guidance_scale=scale,
+                unconditional_conditioning=uc,
+                eta=ddim_eta,
+                x_T=None,
+            )
 
             x_samples_ddim = model.decode_first_stage(samples_ddim)
             return torch.clamp((x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0).cpu()
@@ -55,10 +59,9 @@ def main(
     precision="fp32",
     h=512,
     w=512,
-    ):
-
+):
     input_im = transforms.ToTensor()(input_im).unsqueeze(0).to(device)
-    input_im = input_im*2-1
+    input_im = input_im * 2 - 1
 
     if plms:
         sampler = PLMSSampler(model)
@@ -66,16 +69,26 @@ def main(
     else:
         sampler = DDIMSampler(model)
 
-    x_samples_ddim = sample_model(input_im, model, sampler, precision, h, w, ddim_steps, n_samples, scale, ddim_eta)
+    x_samples_ddim = sample_model(
+        input_im,
+        model,
+        sampler,
+        precision,
+        h,
+        w,
+        ddim_steps,
+        n_samples,
+        scale,
+        ddim_eta,
+    )
     output_ims = []
     for x_sample in x_samples_ddim:
-        x_sample = 255. * rearrange(x_sample.cpu().numpy(), 'c h w -> h w c')
+        x_sample = 255.0 * rearrange(x_sample.cpu().numpy(), "c h w -> h w c")
         output_ims.append(Image.fromarray(x_sample.astype(np.uint8)))
     return output_ims
 
 
-description = \
-"""Generate variations on an input image using a fine-tuned version of Stable Diffision.
+description = """Generate variations on an input image using a fine-tuned version of Stable Diffision.
 Trained by [Justin Pinkney](https://www.justinpinkney.com) ([@Buntworthy](https://twitter.com/Buntworthy)) at [Lambda](https://lambdalabs.com/)
 
 __Get the [code](https://github.com/justinpinkney/stable-diffusion) and [model](https://huggingface.co/lambdalabs/stable-diffusion-image-conditioned).__
@@ -84,8 +97,7 @@ __Get the [code](https://github.com/justinpinkney/stable-diffusion) and [model](
 
 """
 
-article = \
-"""
+article = """
 ## How does this work?
 
 The normal Stable Diffusion model is trained to be conditioned on text input. This version has had the original text encoder (from CLIP) removed, and replaced with
@@ -103,8 +115,7 @@ def run_demo(
     device_idx=0,
     ckpt="models/ldm/stable-diffusion-v1/sd-clip-vit-l14-img-embed_ema_only.ckpt",
     config="configs/stable-diffusion/sd-image-condition-finetune.yaml",
-    ):
-
+):
     device = f"cuda:{device_idx}"
     config = OmegaConf.load(config)
     model = load_model_from_config(config, ckpt, device=device)
@@ -136,8 +147,9 @@ def run_demo(
         outputs=output,
         examples=examples,
         allow_flagging="never",
-        )
+    )
     demo.launch(enable_queue=True, share=True)
+
 
 if __name__ == "__main__":
     fire.Fire(run_demo)

@@ -10,39 +10,35 @@ from ldm.models.diffusion.ddim import DDIMSampler
 
 def make_batch_ldm(image, mask, device):
     image = np.array(Image.open(image).convert("RGB"))
-    image = image.astype(np.float32)/255.0
-    image = image[None].transpose(0,3,1,2)
+    image = image.astype(np.float32) / 255.0
+    image = image[None].transpose(0, 3, 1, 2)
     image = torch.from_numpy(image)
 
     mask = np.array(Image.open(mask).convert("L"))
-    mask = mask.astype(np.float32)/255.0
-    mask = mask[None,None]
+    mask = mask.astype(np.float32) / 255.0
+    mask = mask[None, None]
     mask[mask < 0.5] = 0
     mask[mask >= 0.5] = 1
     mask = torch.from_numpy(mask)
 
-    masked_image = (1-mask)*image
+    masked_image = (1 - mask) * image
 
     batch = {"image": image, "mask": mask, "masked_image": masked_image}
     for k in batch:
         batch[k] = batch[k].to(device=device)
-        batch[k] = batch[k]*2.0-1.0
+        batch[k] = batch[k] * 2.0 - 1.0
     return batch
 
 
-def make_batch_sd(
-        image,
-        mask,
-        txt,
-        device):
+def make_batch_sd(image, mask, txt, device):
     # image hwc in -1 1
     image = np.array(Image.open(image).convert("RGB"))
-    image = image[None].transpose(0,3,1,2)
-    image = torch.from_numpy(image).to(dtype=torch.float32)/127.5-1.0
+    image = image[None].transpose(0, 3, 1, 2)
+    image = torch.from_numpy(image).to(dtype=torch.float32) / 127.5 - 1.0
 
     mask = np.array(Image.open(mask).convert("L"))
-    mask = mask.astype(np.float32)/255.0
-    mask = mask[None,None]
+    mask = mask.astype(np.float32) / 255.0
+    mask = mask[None, None]
     mask[mask < 0.5] = 0
     mask[mask >= 0.5] = 1
     mask = torch.from_numpy(mask)
@@ -50,11 +46,11 @@ def make_batch_sd(
     masked_image = image * (mask < 0.5)
 
     batch = {
-            "jpg": image.to(device=device),
-            "txt": [txt],
-            "mask": mask.to(device=device),
-            "masked_image": masked_image.to(device=device),
-            }
+        "jpg": image.to(device=device),
+        "txt": [txt],
+        "mask": mask.to(device=device),
+        "masked_image": masked_image.to(device=device),
+    }
     return batch
 
 
@@ -117,14 +113,13 @@ if __name__ == "__main__":
     images = [x.replace(f"_{mstr}", ".png") for x in masks]
     print(f"Found {len(masks)} inputs.")
 
-    #config = "models/ldm/inpainting_big/config.yaml"
-    config="/fsx/stable-diffusion/stable-diffusion/configs/stable-diffusion/inpainting/v1-finetune-for-inpainting-laion-iaesthe.yaml"
+    # config = "models/ldm/inpainting_big/config.yaml"
+    config = "/fsx/stable-diffusion/stable-diffusion/configs/stable-diffusion/inpainting/v1-finetune-for-inpainting-laion-iaesthe.yaml"
     config = OmegaConf.load(config)
     model = instantiate_from_config(config.model)
-    #ckpt="models/ldm/inpainting_big/last.ckpt"
-    ckpt=opt.ckpt
-    model.load_state_dict(torch.load(ckpt)["state_dict"],
-                          strict=False)
+    # ckpt="models/ldm/inpainting_big/last.ckpt"
+    ckpt = opt.ckpt
+    model.load_state_dict(torch.load(ckpt)["state_dict"], strict=False)
 
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     model = model.to(device)
@@ -139,11 +134,15 @@ if __name__ == "__main__":
         with model.ema_scope():
             for image, mask in tqdm(zip(images, masks), total=len(images)):
                 outpath = os.path.join(opt.outdir, os.path.split(image)[1])
-                #batch = make_batch_ldm(image, mask, device=device)
+                # batch = make_batch_ldm(image, mask, device=device)
 
                 ##### unroll
-                batch = make_batch_sd(image, mask, txt="photograph of a beautiful empty scene, highest quality settings",
-                        device=device)
+                batch = make_batch_sd(
+                    image,
+                    mask,
+                    txt="photograph of a beautiful empty scene, highest quality settings",
+                    device=device,
+                )
 
                 c = model.cond_stage_model.encode(batch["txt"])
 
@@ -154,12 +153,14 @@ if __name__ == "__main__":
                         bchw = (1, 4, 64, 64)
                         cc = torch.nn.functional.interpolate(cc, size=bchw[-2:])
                     else:
-                        cc = model.get_first_stage_encoding(model.encode_first_stage(cc))
+                        cc = model.get_first_stage_encoding(
+                            model.encode_first_stage(cc)
+                        )
                     c_cat.append(cc)
                 c_cat = torch.cat(c_cat, dim=1)
 
                 # cond
-                cond={"c_concat": [c_cat], "c_crossattn": [c]}
+                cond = {"c_concat": [c_cat], "c_crossattn": [c]}
 
                 # uncond cond
                 uc_cross = model.get_unconditional_conditioning(1, "")
@@ -167,24 +168,23 @@ if __name__ == "__main__":
 
                 shape = (model.channels, model.image_size, model.image_size)
                 samples_cfg, intermediates = sampler.sample(
-                        opt.steps,
-                        1,
-                        shape,
-                        cond,
-                        verbose=False,
-                        eta=opt.eta,
-                        unconditional_guidance_scale=opt.scale,
-                        unconditional_conditioning=uc_full,
+                    opt.steps,
+                    1,
+                    shape,
+                    cond,
+                    verbose=False,
+                    eta=opt.eta,
+                    unconditional_guidance_scale=opt.scale,
+                    unconditional_conditioning=uc_full,
                 )
                 x_samples_ddim = model.decode_first_stage(samples_cfg)
 
-                image = torch.clamp((batch["jpg"]+1.0)/2.0,
-                                    min=0.0, max=1.0)
-                mask = torch.clamp((batch["mask"]+1.0)/2.0,
-                                   min=0.0, max=1.0)
-                predicted_image = torch.clamp((x_samples_ddim+1.0)/2.0,
-                                              min=0.0, max=1.0)
+                image = torch.clamp((batch["jpg"] + 1.0) / 2.0, min=0.0, max=1.0)
+                mask = torch.clamp((batch["mask"] + 1.0) / 2.0, min=0.0, max=1.0)
+                predicted_image = torch.clamp(
+                    (x_samples_ddim + 1.0) / 2.0, min=0.0, max=1.0
+                )
 
-                inpainted = (1-mask)*image+mask*predicted_image
-                inpainted = inpainted.cpu().numpy().transpose(0,2,3,1)[0]*255
+                inpainted = (1 - mask) * image + mask * predicted_image
+                inpainted = inpainted.cpu().numpy().transpose(0, 2, 3, 1)[0] * 255
                 Image.fromarray(inpainted.astype(np.uint8)).save(outpath)

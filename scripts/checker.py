@@ -59,7 +59,6 @@ class Sampler(object):
         self.n_steps = 100
         self.nrow = 8
 
-
     @torch.inference_mode()
     def sample(self, model, prompts, ema=True):
         seed = self.seed
@@ -109,13 +108,12 @@ class Sampler(object):
                 )
 
                 samples = model.decode_first_stage(samples_latent)
-                samples = torch.clamp((samples+1.0)/2.0, min=0.0, max=1.0)
+                samples = torch.clamp((samples + 1.0) / 2.0, min=0.0, max=1.0)
 
                 all_samples.append(samples)
 
         all_samples = torch.cat(all_samples, 0)
         return all_samples
-
 
     @torch.inference_mode()
     def __call__(self):
@@ -130,10 +128,9 @@ class Sampler(object):
         all_samples = self.sample(model, prompts, ema=False)
         self.save_as_grid("grid_without_wings", all_samples, global_step)
 
-
     def save_as_grid(self, name, grid, global_step):
         grid = make_grid(grid, nrow=self.nrow)
-        grid = 255. * rearrange(grid, 'c h w -> h w c').cpu().numpy()
+        grid = 255.0 * rearrange(grid, "c h w -> h w c").cpu().numpy()
 
         os.makedirs(self.out_dir, exist_ok=True)
         filename = "{}_gs-{:06}_e-{:06}_b-{:06}.png".format(
@@ -170,29 +167,37 @@ class Checker(object):
                     time.sleep(self.wait_for_file)
                     stamp = os.stat(self.filename).st_mtime
                     if stamp != previous_stamp:
-                        print(f"File is still changing. Waiting {self.wait_for_file} seconds.")
+                        print(
+                            f"File is still changing. Waiting {self.wait_for_file} seconds."
+                        )
                     else:
                         break
 
                 self._cached_stamp = stamp
                 # file has changed, so do something...
-                print(f"{self.__class__.__name__}: Detected a new file at "
-                      f"{self.filename}, calling back.")
+                print(
+                    f"{self.__class__.__name__}: Detected a new file at "
+                    f"{self.filename}, calling back."
+                )
                 self.callback()
 
             else:
                 time.sleep(self.interval)
 
 
-def run(prompts_path="scripts/prompts/prompts-with-wings.txt",
-        watch_log_dir=None, out_dir=None, ckpt_path=None, cfg_path=None,
-        H=256,
-        W=None,
-        C=4,
-        F=8,
-        wait_for_file=5,
-        interval=60):
-
+def run(
+    prompts_path="scripts/prompts/prompts-with-wings.txt",
+    watch_log_dir=None,
+    out_dir=None,
+    ckpt_path=None,
+    cfg_path=None,
+    H=256,
+    W=None,
+    C=4,
+    F=8,
+    wait_for_file=5,
+    interval=60,
+):
     if out_dir is None:
         assert watch_log_dir is not None
         out_dir = os.path.join(watch_log_dir, "images/checker")
@@ -212,10 +217,12 @@ def run(prompts_path="scripts/prompts/prompts-with-wings.txt",
     if H is None:
         assert W is not None
         H = W
-    shape = [C, H//F, W//F]
+    shape = [C, H // F, W // F]
     sampler = Sampler(out_dir, ckpt_path, cfg_path, prompts_path, shape=shape)
 
-    checker = Checker(ckpt_path, sampler, wait_for_file=wait_for_file, interval=interval)
+    checker = Checker(
+        ckpt_path, sampler, wait_for_file=wait_for_file, interval=interval
+    )
     checker.check()
 
 

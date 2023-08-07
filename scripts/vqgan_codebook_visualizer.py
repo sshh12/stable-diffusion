@@ -12,14 +12,15 @@ from einops import rearrange
 from torchvision.utils import make_grid
 
 
-rescale = lambda x: (x + 1.) / 2.
+rescale = lambda x: (x + 1.0) / 2.0
 
 
 def bchw_to_st(x):
-    return rescale(x.detach().cpu().numpy().transpose(0,2,3,1))
+    return rescale(x.detach().cpu().numpy().transpose(0, 2, 3, 1))
+
 
 def chw_to_st(x):
-    return rescale(x.detach().cpu().numpy().transpose(1,2,0))
+    return rescale(x.detach().cpu().numpy().transpose(1, 2, 0))
 
 
 def custom_get_input(batch, key):
@@ -73,7 +74,7 @@ def get_parser():
         type=str,
         nargs="?",
         default="",
-        help="path to dataset config"
+        help="path to dataset config",
     )
     return parser
 
@@ -105,7 +106,7 @@ def load_model_and_dset(config, ckpt, gpu, eval_mode, delete_dataset_params=Fals
         del config["data"]["params"]["train"]["params"]
         del config["data"]["params"]["validation"]["params"]
 
-    dsets = get_data(config)   # calls data.config ...
+    dsets = get_data(config)  # calls data.config ...
 
     # now load the specified checkpoint
     if ckpt:
@@ -114,20 +115,22 @@ def load_model_and_dset(config, ckpt, gpu, eval_mode, delete_dataset_params=Fals
     else:
         pl_sd = {"state_dict": None}
         global_step = None
-    model = load_model_from_config(config.model,
-                                   pl_sd["state_dict"],
-                                   gpu=gpu,
-                                   eval_mode=eval_mode)["model"]
+    model = load_model_from_config(
+        config.model, pl_sd["state_dict"], gpu=gpu, eval_mode=eval_mode
+    )["model"]
     return dsets, model, global_step
 
 
 @torch.no_grad()
 def get_image_embeddings(model, dset, used_codebook, used_indices):
     import plotly.graph_objects as go
-    batch_size = st.number_input("Batch size for embedding visualization", min_value=1, value=4)
-    start_index = st.number_input("Start index", value=0,
-                                          min_value=0,
-                                          max_value=len(dset) - batch_size)
+
+    batch_size = st.number_input(
+        "Batch size for embedding visualization", min_value=1, value=4
+    )
+    start_index = st.number_input(
+        "Start index", value=0, min_value=0, max_value=len(dset) - batch_size
+    )
     if st.sidebar.button("Sample Batch"):
         indices = np.random.choice(len(dset), batch_size)
     else:
@@ -142,7 +145,7 @@ def get_image_embeddings(model, dset, used_codebook, used_indices):
     z_pre_quant = model.encode_to_prequant(x)
     z_quant, emb_loss, info = model.quantize(z_pre_quant)
     indices = info[2].detach().cpu().numpy()
-    #indices = rearrange(indices, '(b d) -> b d', b=batch_size)
+    # indices = rearrange(indices, '(b d) -> b d', b=batch_size)
     unique_indices = np.unique(indices)
     st.write(f"Unique indices in batch: {unique_indices.shape[0]}")
 
@@ -150,23 +153,42 @@ def get_image_embeddings(model, dset, used_codebook, used_indices):
     x2 = used_codebook[:, 1].cpu().numpy()
     x3 = used_codebook[:, 2].cpu().numpy()
 
-    zp1 = rearrange(z_pre_quant, 'b c h w -> (b h w) c')[:, 0].cpu().numpy()
-    zp2 = rearrange(z_pre_quant, 'b c h w -> (b h w) c')[:, 1].cpu().numpy()
-    zp3 = rearrange(z_pre_quant, 'b c h w -> (b h w) c')[:, 2].cpu().numpy()
+    zp1 = rearrange(z_pre_quant, "b c h w -> (b h w) c")[:, 0].cpu().numpy()
+    zp2 = rearrange(z_pre_quant, "b c h w -> (b h w) c")[:, 1].cpu().numpy()
+    zp3 = rearrange(z_pre_quant, "b c h w -> (b h w) c")[:, 2].cpu().numpy()
 
-    zq1 = rearrange(z_quant, 'b c h w -> (b h w) c')[:, 0].cpu().numpy()
-    zq2 = rearrange(z_quant, 'b c h w -> (b h w) c')[:, 1].cpu().numpy()
-    zq3 = rearrange(z_quant, 'b c h w -> (b h w) c')[:, 2].cpu().numpy()
+    zq1 = rearrange(z_quant, "b c h w -> (b h w) c")[:, 0].cpu().numpy()
+    zq2 = rearrange(z_quant, "b c h w -> (b h w) c")[:, 1].cpu().numpy()
+    zq3 = rearrange(z_quant, "b c h w -> (b h w) c")[:, 2].cpu().numpy()
 
-    fig = go.Figure(data=[go.Scatter3d(x=x1, y=x2, z=x3, mode='markers', marker=dict(size=1.4, line=dict(width=1.,
-                                                                                                         color="Blue")),
-                                       name="All Used Codebook Entries"),
-
-                          ])
-    trace2 = go.Scatter3d(x=zp1, y=zp2, z=zp3, mode='markers', marker=dict(size=1., line=dict(width=1., color=indices)),
-                          name="Pre-Quant Codes")
-    trace3 = go.Scatter3d(x=zq1, y=zq2, z=zq3, mode='markers',
-                          marker=dict(size=2., line=dict(width=10., color=indices)), name="Quantized Codes")
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=x1,
+                y=x2,
+                z=x3,
+                mode="markers",
+                marker=dict(size=1.4, line=dict(width=1.0, color="Blue")),
+                name="All Used Codebook Entries",
+            ),
+        ]
+    )
+    trace2 = go.Scatter3d(
+        x=zp1,
+        y=zp2,
+        z=zp3,
+        mode="markers",
+        marker=dict(size=1.0, line=dict(width=1.0, color=indices)),
+        name="Pre-Quant Codes",
+    )
+    trace3 = go.Scatter3d(
+        x=zq1,
+        y=zq2,
+        z=zq3,
+        mode="markers",
+        marker=dict(size=2.0, line=dict(width=10.0, color=indices)),
+        name="Quantized Codes",
+    )
 
     fig.add_trace(trace2)
     fig.add_trace(trace3)
@@ -184,19 +206,22 @@ def get_image_embeddings(model, dset, used_codebook, used_indices):
     st.text("Fitting Gaussian...")
     h, w = z_quant.shape[2], z_quant.shape[3]
     from sklearn.mixture import GaussianMixture
+
     gaussian = GaussianMixture(n_components=1)
-    gaussian.fit(rearrange(z_pre_quant, 'b c h w -> (b h w) c').cpu().numpy())
-    samples, _ = gaussian.sample(n_samples=batch_size*h*w)
-    samples = rearrange(samples, '(b h w) c -> b h w c', b=batch_size, h=h, w=w, c=3)
-    samples = rearrange(samples, 'b h w c -> b c h w')
+    gaussian.fit(rearrange(z_pre_quant, "b c h w -> (b h w) c").cpu().numpy())
+    samples, _ = gaussian.sample(n_samples=batch_size * h * w)
+    samples = rearrange(samples, "(b h w) c -> b h w c", b=batch_size, h=h, w=w, c=3)
+    samples = rearrange(samples, "b h w c -> b c h w")
     samples = torch.tensor(samples).to(z_quant)
     samples, _, _ = model.quantize(samples)
     x_sample = model.decode(samples)
 
-    all_img = torch.stack([x, x_rec_quant, x_rec_no_quant, delta_x, x_sample])   # 5 b 3 H W
+    all_img = torch.stack(
+        [x, x_rec_quant, x_rec_no_quant, delta_x, x_sample]
+    )  # 5 b 3 H W
 
-    all_img = rearrange(all_img, 'n b c h w -> b n c h w')
-    all_img = rearrange(all_img, 'b n c h w -> (b n) c h w')
+    all_img = rearrange(all_img, "n b c h w -> b n c h w")
+    all_img = rearrange(all_img, "b n c h w -> (b n) c h w")
     grid = make_grid(all_img, nrow=5)
 
     st.write("** Input | Rec. (w/ quant) | Rec. (no quant) | Delta(quant, no_quant) **")
@@ -205,19 +230,30 @@ def get_image_embeddings(model, dset, used_codebook, used_indices):
     st.write(fig)
     # 2d projections
     import matplotlib.pyplot as plt
+
     pairs = [(1, 0), (2, 0), (2, 1)]
     fig2, ax = plt.subplots(1, 3, figsize=(21, 7))
     for d in range(3):
         d1, d2 = pairs[d]
-        #ax[d].scatter(used_codebook[:, d1].cpu().numpy(),
+        # ax[d].scatter(used_codebook[:, d1].cpu().numpy(),
         #              used_codebook[:, d2].cpu().numpy(),
         #              label="All Used Codebook Entries", s=10.0, c=used_indices)
-        ax[d].scatter(rearrange(z_quant, 'b c h w -> (b h w) c')[:, d1].cpu().numpy(),
-                      rearrange(z_quant, 'b c h w -> (b h w) c')[:, d2].cpu().numpy(),
-                      label="Quantized Codes", alpha=0.9, s=8.0, c=indices)
-        ax[d].scatter(rearrange(z_pre_quant, 'b c h w -> (b h w) c')[:, d1].cpu().numpy(),
-                      rearrange(z_pre_quant, 'b c h w -> (b h w) c')[:, d2].cpu().numpy(),
-                      label="Pre-Quant Codes", alpha=0.5, s=1.0, c=indices)
+        ax[d].scatter(
+            rearrange(z_quant, "b c h w -> (b h w) c")[:, d1].cpu().numpy(),
+            rearrange(z_quant, "b c h w -> (b h w) c")[:, d2].cpu().numpy(),
+            label="Quantized Codes",
+            alpha=0.9,
+            s=8.0,
+            c=indices,
+        )
+        ax[d].scatter(
+            rearrange(z_pre_quant, "b c h w -> (b h w) c")[:, d1].cpu().numpy(),
+            rearrange(z_pre_quant, "b c h w -> (b h w) c")[:, d2].cpu().numpy(),
+            label="Pre-Quant Codes",
+            alpha=0.5,
+            s=1.0,
+            c=indices,
+        )
         ax[d].set_title(f"dim {d2} vs dim {d1}")
         ax[d].legend()
     st.write(fig2)
@@ -241,7 +277,9 @@ def get_image_embeddings(model, dset, used_codebook, used_indices):
 
 @torch.no_grad()
 def get_used_indices(model, dset, batch_size=20):
-    dloader = torch.utils.data.DataLoader(dset, shuffle=True, batch_size=batch_size, drop_last=False)
+    dloader = torch.utils.data.DataLoader(
+        dset, shuffle=True, batch_size=batch_size, drop_last=False
+    )
     data = list()
     info = st.empty()
     for i, batch in enumerate(dloader):
@@ -253,10 +291,12 @@ def get_used_indices(model, dset, batch_size=20):
         data.append(indices)
 
         unique = np.unique(data)
-        info.text(f"iteration {i} [{batch_size*i}/{len(dset)}]: unique indices found so far: {unique.size}")
+        info.text(
+            f"iteration {i} [{batch_size*i}/{len(dset)}]: unique indices found so far: {unique.size}"
+        )
 
     unique = np.unique(data)
-    #np.save(outpath, unique)
+    # np.save(outpath, unique)
     st.write(f"end of data: found **{unique.size} unique indices.**")
     print(f"end of data: found {unique.size} unique indices.")
     return unique
@@ -271,8 +311,8 @@ def visualize3d(codebook, used_indices):
     z_dim = codebook.shape[1]
     assert z_dim == 3
 
-    pairs = [(1,0), (2,0), (2,1)]
-    fig, ax = plt.subplots(1,3, figsize=(15,5))
+    pairs = [(1, 0), (2, 0), (2, 1)]
+    fig, ax = plt.subplots(1, 3, figsize=(15, 5))
     for d in range(3):
         d1, d2 = pairs[d]
         ax[d].scatter(selected_codebook[:, d1], selected_codebook[:, d2])
@@ -289,7 +329,7 @@ def visualize3d(codebook, used_indices):
     # st.pyplot(fig)
 
     # plot histogram of vector norms
-    fig = plt.figure(2, figsize=(6,5))
+    fig = plt.figure(2, figsize=(6, 5))
     norms = np.linalg.norm(selected_codebook, axis=1)
     plt.hist(norms, bins=100, edgecolor="black", lw=1.1)
     plt.title("Distribution of norms of used codebook entries")
@@ -298,14 +338,21 @@ def visualize3d(codebook, used_indices):
     # plot 3D with plotly
     import pandas as pd
     import plotly.graph_objects as go
+
     x = selected_codebook[:, 0]
     y = selected_codebook[:, 1]
     z = selected_codebook[:, 2]
-    fig = go.Figure(data=[go.Scatter3d(x=x, y=y, z=z, mode='markers', marker=dict(size=2., line=dict(width=1.,
-                                                                                                     color="Blue"))
-                                       )
-                          ]
-                    )
+    fig = go.Figure(
+        data=[
+            go.Scatter3d(
+                x=x,
+                y=y,
+                z=z,
+                mode="markers",
+                marker=dict(size=2.0, line=dict(width=1.0, color="Blue")),
+            )
+        ]
+    )
 
     fig.update_layout(
         autosize=False,
@@ -317,12 +364,20 @@ def visualize3d(codebook, used_indices):
 
 @torch.no_grad()
 def get_fixed_points(model, dset):
-    n_iter = st.number_input("Number of Iterations for FP-Analysis", min_value=1, value=25)
-    batch_size = st.number_input("Batch size for fixed-point visualization", min_value=1, value=4)
-    start_index = st.number_input("Start index", value=0, min_value=0, max_value=len(dset) - batch_size)
+    n_iter = st.number_input(
+        "Number of Iterations for FP-Analysis", min_value=1, value=25
+    )
+    batch_size = st.number_input(
+        "Batch size for fixed-point visualization", min_value=1, value=4
+    )
+    start_index = st.number_input(
+        "Start index", value=0, min_value=0, max_value=len(dset) - batch_size
+    )
     clip_decoded = st.checkbox("Clip decoded image", False)
-    quantize_decoded = st.checkbox("Quantize decoded image (e.g. map back to uint8)", False)
-    factor = st.sidebar.number_input("image size", value=1., min_value=0.1)
+    quantize_decoded = st.checkbox(
+        "Quantize decoded image (e.g. map back to uint8)", False
+    )
+    factor = st.sidebar.number_input("image size", value=1.0, min_value=0.1)
     if st.sidebar.button("Sample Batch"):
         indices = np.random.choice(len(dset), batch_size)
     else:
@@ -347,10 +402,15 @@ def get_fixed_points(model, dset):
 
     def display(input, img_quant, img_noquant, delta_img):
         all_img = torch.stack([input, img_quant, img_noquant, delta_img])  # 4 b 3 H W
-        all_img = rearrange(all_img, 'n b c h w -> b n c h w')
-        all_img = rearrange(all_img, 'b n c h w -> (b n) c h w')
+        all_img = rearrange(all_img, "n b c h w -> b n c h w")
+        all_img = rearrange(all_img, "b n c h w -> (b n) c h w")
         grid = make_grid(all_img, nrow=4)
-        image_progress.image(chw_to_st(grid), clamp=True, output_format="PNG", width=int(factor*grid.shape[2]))
+        image_progress.image(
+            chw_to_st(grid),
+            clamp=True,
+            output_format="PNG",
+            width=int(factor * grid.shape[2]),
+        )
 
     display(input, img_quant, img_noquant, delta_img)
     for n in range(n_iter):
@@ -366,12 +426,26 @@ def get_fixed_points(model, dset):
         img_quant = model.decode(z_quant)
         img_noquant = model.decode(z_noquant)
         if clip_decoded:
-            img_quant = torch.clamp(img_quant, -1., 1.)
-            img_noquant = torch.clamp(img_noquant, -1., 1.)
+            img_quant = torch.clamp(img_quant, -1.0, 1.0)
+            img_noquant = torch.clamp(img_noquant, -1.0, 1.0)
         if quantize_decoded:
             device = img_quant.device
-            img_quant = (2*torch.Tensor(((img_quant.cpu().numpy()+1.)*127.5).astype(np.uint8))/255. - 1.).to(device)
-            img_noquant = (2*torch.Tensor(((img_noquant.cpu().numpy()+1.)*127.5).astype(np.uint8))/255. - 1.).to(device)
+            img_quant = (
+                2
+                * torch.Tensor(
+                    ((img_quant.cpu().numpy() + 1.0) * 127.5).astype(np.uint8)
+                )
+                / 255.0
+                - 1.0
+            ).to(device)
+            img_noquant = (
+                2
+                * torch.Tensor(
+                    ((img_noquant.cpu().numpy() + 1.0) * 127.5).astype(np.uint8)
+                )
+                / 255.0
+                - 1.0
+            ).to(device)
         delta_img = img_quant - img_noquant
         display(input, img_quant, img_noquant, delta_img)
         progress_cb(n + 1)
@@ -379,13 +453,21 @@ def get_fixed_points(model, dset):
 
 @torch.no_grad()
 def get_fixed_points_kl_ae(model, dset):
-    n_iter = st.number_input("Number of Iterations for FP-Analysis", min_value=1, value=25)
-    batch_size = st.number_input("Batch size for fixed-point visualization", min_value=1, value=4)
-    start_index = st.number_input("Start index", value=0, min_value=0, max_value=len(dset) - batch_size)
+    n_iter = st.number_input(
+        "Number of Iterations for FP-Analysis", min_value=1, value=25
+    )
+    batch_size = st.number_input(
+        "Batch size for fixed-point visualization", min_value=1, value=4
+    )
+    start_index = st.number_input(
+        "Start index", value=0, min_value=0, max_value=len(dset) - batch_size
+    )
     clip_decoded = st.checkbox("Clip decoded image", False)
-    quantize_decoded = st.checkbox("Quantize decoded image (e.g. map back to uint8)", False)
+    quantize_decoded = st.checkbox(
+        "Quantize decoded image (e.g. map back to uint8)", False
+    )
     sample_posterior = st.checkbox("Sample from encoder posterior", False)
-    factor = st.sidebar.number_input("image size", value=1., min_value=0.1)
+    factor = st.sidebar.number_input("image size", value=1.0, min_value=0.1)
     if st.sidebar.button("Sample Batch"):
         indices = np.random.choice(len(dset), batch_size)
     else:
@@ -408,18 +490,24 @@ def get_fixed_points_kl_ae(model, dset):
 
     def display(input, img_noquant, delta_img):
         all_img = torch.stack([input, img_noquant, delta_img])  # 3 b 3 H W
-        all_img = rearrange(all_img, 'n b c h w -> b n c h w')
-        all_img = rearrange(all_img, 'b n c h w -> (b n) c h w')
+        all_img = rearrange(all_img, "n b c h w -> b n c h w")
+        all_img = rearrange(all_img, "b n c h w -> (b n) c h w")
         grid = make_grid(all_img, nrow=3)
-        image_progress.image(chw_to_st(grid), clamp=True, output_format="PNG", width=int(factor*grid.shape[2]))
+        image_progress.image(
+            chw_to_st(grid),
+            clamp=True,
+            output_format="PNG",
+            width=int(factor * grid.shape[2]),
+        )
 
     fig, ax = plt.subplots()
 
     distribution_progress = st.empty()
-    def display_latent_distribution(latent_z, alpha=1., title=""):
+
+    def display_latent_distribution(latent_z, alpha=1.0, title=""):
         flatz = latent_z.reshape(-1).cpu().detach().numpy()
-        #fig, ax = plt.subplots()
-        ax.hist(flatz, bins=42, alpha=alpha, lw=.1, edgecolor="black")
+        # fig, ax = plt.subplots()
+        ax.hist(flatz, bins=42, alpha=alpha, lw=0.1, edgecolor="black")
         ax.set_title(title)
         distribution_progress.pyplot(fig)
 
@@ -433,27 +521,37 @@ def get_fixed_points_kl_ae(model, dset):
         else:
             z = posterior.mode()
 
-        if n==0:
+        if n == 0:
             flatz_init = z.reshape(-1).cpu().detach().numpy()
             std_init = flatz_init.std()
             max_init, min_init = flatz_init.max(), flatz_init.min()
 
-        display_latent_distribution(z, alpha=np.sqrt(1/(n+1)),
-                                    title=f"initial z: std/min/max: {std_init:.2f}/{min_init:.2f}/{max_init:.2f}")
+        display_latent_distribution(
+            z,
+            alpha=np.sqrt(1 / (n + 1)),
+            title=f"initial z: std/min/max: {std_init:.2f}/{min_init:.2f}/{max_init:.2f}",
+        )
 
         img_noquant = model.decode(z)
         if clip_decoded:
-            img_noquant = torch.clamp(img_noquant, -1., 1.)
+            img_noquant = torch.clamp(img_noquant, -1.0, 1.0)
         if quantize_decoded:
-            img_noquant = (2*torch.Tensor(((img_noquant.cpu().numpy()+1.)*127.5).astype(np.uint8))/255. - 1.).to(model.device)
+            img_noquant = (
+                2
+                * torch.Tensor(
+                    ((img_noquant.cpu().numpy() + 1.0) * 127.5).astype(np.uint8)
+                )
+                / 255.0
+                - 1.0
+            ).to(model.device)
         delta_img = img_noquant - input
         display(input, img_noquant, delta_img)
         progress_cb(n + 1)
 
 
-
 if __name__ == "__main__":
     from ldm.models.autoencoder import AutoencoderKL
+
     # VISUALIZE USED AND ALL INDICES of VQ-Model. VISUALIZE FIXED POINTS OF KL MODEL
     sys.path.append(os.getcwd())
 
@@ -467,9 +565,9 @@ if __name__ == "__main__":
         if os.path.isfile(opt.resume):
             paths = opt.resume.split("/")
             try:
-                idx = len(paths)-paths[::-1].index("logs")+1
+                idx = len(paths) - paths[::-1].index("logs") + 1
             except ValueError:
-                idx = -2 # take a guess: path/to/logdir/checkpoints/model.ckpt
+                idx = -2  # take a guess: path/to/logdir/checkpoints/model.ckpt
             logdir = "/".join(paths[:idx])
             ckpt = opt.resume
         else:
@@ -478,7 +576,7 @@ if __name__ == "__main__":
             ckpt = os.path.join(logdir, "checkpoints", "last.ckpt")
 
         base_configs = sorted(glob.glob(os.path.join(logdir, "configs/*-project.yaml")))
-        opt.base = base_configs+opt.base
+        opt.base = base_configs + opt.base
 
     if opt.config:
         if type(opt.config) == str:
@@ -509,8 +607,9 @@ if __name__ == "__main__":
         st.json(OmegaConf.to_container(config))
 
     delelete_dataset_parameters = st.sidebar.checkbox("Delete parameters of dataset.")
-    dsets, model, global_step = load_model_and_dset(config, ckpt, gpu, eval_mode,
-                                                    delete_dataset_params=delelete_dataset_parameters)
+    dsets, model, global_step = load_model_and_dset(
+        config, ckpt, gpu, eval_mode, delete_dataset_params=delelete_dataset_parameters
+    )
     gs.text(f"Global step: {global_step}")
 
     split = st.sidebar.radio("Split", sorted(dsets.datasets.keys())[::-1])
@@ -518,14 +617,20 @@ if __name__ == "__main__":
 
     batch_size = st.sidebar.number_input("Batch size", min_value=1, value=20)
     num_batches = st.sidebar.number_input("Number of batches", min_value=1, value=5)
-    data_size = batch_size*num_batches
-    dset = torch.utils.data.Subset(dset, np.random.choice(np.arange(len(dset)), size=(data_size,), replace=False))
+    data_size = batch_size * num_batches
+    dset = torch.utils.data.Subset(
+        dset, np.random.choice(np.arange(len(dset)), size=(data_size,), replace=False)
+    )
 
     if not isinstance(model, AutoencoderKL):
         # VQ MODEL
         codebook = model.quantize.embedding.weight.data
-        st.write(f"VQ-Model has codebook of dimensionality **{codebook.shape[0]} x {codebook.shape[1]} (num_entries x z_dim)**")
-        st.write(f"Evaluating codebook-usage on **{config['data']['params'][split]['target']}**")
+        st.write(
+            f"VQ-Model has codebook of dimensionality **{codebook.shape[0]} x {codebook.shape[1]} (num_entries x z_dim)**"
+        )
+        st.write(
+            f"Evaluating codebook-usage on **{config['data']['params'][split]['target']}**"
+        )
         st.write("**Select ONE of the following options**")
 
         if st.checkbox("Show Codebook Statistics", False):

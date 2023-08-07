@@ -12,7 +12,6 @@ from scripts.convert_sd_to_diffusers import main
 # --device "cuda:7"
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -21,7 +20,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path to the checkpoint to convert."
+        help="Path to the checkpoint to convert.",
     )
 
     parser.add_argument(
@@ -45,7 +44,7 @@ if __name__ == "__main__":
         default=None,
         type=str,
         required=True,
-        help="Path to the output model."
+        help="Path to the output model.",
     )
 
     parser.add_argument(
@@ -67,6 +66,7 @@ if __name__ == "__main__":
 
     # Test output
     from diffusers import StableDiffusionPipeline
+
     pipeline = StableDiffusionPipeline.from_pretrained(args.output_path).to(args.device)
     output = pipeline("yoda", guidance_scale=7.5)["sample"]
     print("Generated test output, please check test_image.jpg")

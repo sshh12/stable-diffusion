@@ -14,17 +14,26 @@ import copy
 import csv
 import cv2
 
+
 # Some hacky things to make experimentation easier
 def make_transform_multi_folder_data(paths, caption_files=None, **kwargs):
     ds = make_multi_folder_data(paths, caption_files, **kwargs)
     return TransformDataset(ds)
+
 
 def make_nfp_data(base_path):
     dirs = list(Path(base_path).glob("*/"))
     print(f"Found {len(dirs)} folders")
     print(dirs)
     tforms = [transforms.Resize(512), transforms.CenterCrop(512)]
-    datasets = [NfpDataset(x, image_transforms=copy.copy(tforms), default_caption="A view from a train window") for x in dirs]
+    datasets = [
+        NfpDataset(
+            x,
+            image_transforms=copy.copy(tforms),
+            default_caption="A view from a train window",
+        )
+        for x in dirs
+    ]
     return torch.utils.data.ConcatDataset(datasets)
 
 
@@ -39,8 +48,12 @@ class VideoDataset(Dataset):
 
         if isinstance(image_transforms, ListConfig):
             image_transforms = [instantiate_from_config(tt) for tt in image_transforms]
-        image_transforms.extend([transforms.ToTensor(),
-                                 transforms.Lambda(lambda x: rearrange(x * 2. - 1., 'c h w -> h w c'))])
+        image_transforms.extend(
+            [
+                transforms.ToTensor(),
+                transforms.Lambda(lambda x: rearrange(x * 2.0 - 1.0, "c h w -> h w c")),
+            ]
+        )
         image_transforms = transforms.Compose(image_transforms)
         self.tform = image_transforms
         with open(self.caption_file) as f:
@@ -62,29 +75,30 @@ class VideoDataset(Dataset):
     def _load_sample(self, index):
         n = self.n
         filename = self.paths[index]
-        min_frame = 2*self.offset + 2
+        min_frame = 2 * self.offset + 2
         vid = cv2.VideoCapture(str(filename))
         max_frames = int(vid.get(cv2.CAP_PROP_FRAME_COUNT))
         curr_frame_n = random.randint(min_frame, max_frames)
-        vid.set(cv2.CAP_PROP_POS_FRAMES,curr_frame_n)
+        vid.set(cv2.CAP_PROP_POS_FRAMES, curr_frame_n)
         _, curr_frame = vid.read()
 
         prev_frames = []
         for i in range(n):
-            prev_frame_n = curr_frame_n - (i+1)*self.offset
-            vid.set(cv2.CAP_PROP_POS_FRAMES,prev_frame_n)
+            prev_frame_n = curr_frame_n - (i + 1) * self.offset
+            vid.set(cv2.CAP_PROP_POS_FRAMES, prev_frame_n)
             _, prev_frame = vid.read()
-            prev_frame = self.tform(Image.fromarray(prev_frame[...,::-1]))
+            prev_frame = self.tform(Image.fromarray(prev_frame[..., ::-1]))
             prev_frames.append(prev_frame)
 
         vid.release()
         caption = self.captions[filename.name]
         data = {
-            "image": self.tform(Image.fromarray(curr_frame[...,::-1])),
+            "image": self.tform(Image.fromarray(curr_frame[..., ::-1])),
             "prev": torch.cat(prev_frames, dim=-1),
-            "txt": caption
+            "txt": caption,
         }
         return data
+
 
 # end hacky things
 
@@ -92,8 +106,12 @@ class VideoDataset(Dataset):
 def make_tranforms(image_transforms):
     if isinstance(image_transforms, ListConfig):
         image_transforms = [instantiate_from_config(tt) for tt in image_transforms]
-    image_transforms.extend([transforms.ToTensor(),
-                                transforms.Lambda(lambda x: rearrange(x * 2. - 1., 'c h w -> h w c'))])
+    image_transforms.extend(
+        [
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: rearrange(x * 2.0 - 1.0, "c h w -> h w c")),
+        ]
+    )
     image_transforms = transforms.Compose(image_transforms)
     return image_transforms
 
@@ -107,27 +125,29 @@ def make_multi_folder_data(paths, caption_files=None, **kwargs):
     """
     list_of_paths = []
     if isinstance(paths, (Dict, DictConfig)):
-        assert caption_files is None, \
-            "Caption files not yet supported for repeats"
+        assert caption_files is None, "Caption files not yet supported for repeats"
         for folder_path, repeats in paths.items():
-            list_of_paths.extend([folder_path]*repeats)
+            list_of_paths.extend([folder_path] * repeats)
         paths = list_of_paths
 
     if caption_files is not None:
-        datasets = [FolderData(p, caption_file=c, **kwargs) for (p, c) in zip(paths, caption_files)]
+        datasets = [
+            FolderData(p, caption_file=c, **kwargs)
+            for (p, c) in zip(paths, caption_files)
+        ]
     else:
         datasets = [FolderData(p, **kwargs) for p in paths]
     return torch.utils.data.ConcatDataset(datasets)
 
 
-
 class NfpDataset(Dataset):
-    def __init__(self,
+    def __init__(
+        self,
         root_dir,
         image_transforms=[],
         ext="jpg",
         default_caption="",
-        ) -> None:
+    ) -> None:
         """assume sequential frames and a deterministic transform"""
 
         self.root_dir = Path(root_dir)
@@ -139,10 +159,9 @@ class NfpDataset(Dataset):
     def __len__(self):
         return len(self.paths) - 1
 
-
     def __getitem__(self, index):
         prev = self.paths[index]
-        curr = self.paths[index+1]
+        curr = self.paths[index + 1]
         data = {}
         data["image"] = self._load_im(curr)
         data["prev"] = self._load_im(prev)
@@ -155,7 +174,8 @@ class NfpDataset(Dataset):
 
 
 class FolderData(Dataset):
-    def __init__(self,
+    def __init__(
+        self,
         root_dir,
         caption_file=None,
         image_transforms=[],
@@ -163,7 +183,7 @@ class FolderData(Dataset):
         default_caption="",
         postprocess=None,
         return_paths=False,
-        ) -> None:
+    ) -> None:
         """Create a dataset from a folder of images.
         If you pass in a root directory it will be searched for images
         ending in ext (ext can be a list)
@@ -211,7 +231,7 @@ class FolderData(Dataset):
             caption = self.captions.get(chosen, None)
             if caption is None:
                 caption = self.default_caption
-            filename = self.root_dir/chosen
+            filename = self.root_dir / chosen
         else:
             filename = self.paths[index]
 
@@ -235,9 +255,12 @@ class FolderData(Dataset):
     def process_im(self, im):
         im = im.convert("RGB")
         return self.tform(im)
+
+
 import random
 
-class TransformDataset():
+
+class TransformDataset:
     def __init__(self, ds, extra_label="sksbspic"):
         self.ds = ds
         self.extra_label = extra_label
@@ -247,46 +270,49 @@ class TransformDataset():
             "randzoom": transforms.RandomCrop(768),
         }
 
-
     def __getitem__(self, index):
         data = self.ds[index]
 
-        im = data['image']
-        im = im.permute(2,0,1)
+        im = data["image"]
+        im = im.permute(2, 0, 1)
         # In case data is smaller than expected
         im = transforms.Resize(1024)(im)
 
         tform_name = random.choice(list(self.transforms.keys()))
         im = self.transforms[tform_name](im)
 
-        im = im.permute(1,2,0)
+        im = im.permute(1, 2, 0)
 
-        data['image'] = im
-        data['txt'] = data['txt'] + f" {self.extra_label} {tform_name}"
+        data["image"] = im
+        data["txt"] = data["txt"] + f" {self.extra_label} {tform_name}"
 
         return data
 
     def __len__(self):
         return len(self.ds)
 
+
 def hf_dataset(
     name,
     image_transforms=[],
     image_column="image",
     text_column="text",
-    split='train',
-    image_key='image',
-    caption_key='txt',
+    split="train",
+    image_key="image",
+    caption_key="txt",
     data_dir=None,
-    cache_dir=None
-    ):
-    """Make huggingface dataset with appropriate list of transforms applied
-    """
+    cache_dir=None,
+):
+    """Make huggingface dataset with appropriate list of transforms applied"""
     ds = load_dataset(name, data_dir=data_dir, cache_dir=cache_dir, split=split)
     tform = make_tranforms(image_transforms)
 
-    assert image_column in ds.column_names, f"Didn't find column {image_column} in {ds.column_names}"
-    assert text_column in ds.column_names, f"Didn't find column {text_column} in {ds.column_names}"
+    assert (
+        image_column in ds.column_names
+    ), f"Didn't find column {image_column} in {ds.column_names}"
+    assert (
+        text_column in ds.column_names
+    ), f"Didn't find column {text_column} in {ds.column_names}"
 
     def pre_process(examples):
         processed = {}
@@ -297,8 +323,11 @@ def hf_dataset(
     ds.set_transform(pre_process)
     return ds
 
+
 class TextOnly(Dataset):
-    def __init__(self, captions, output_size, image_key="image", caption_key="txt", n_gpus=1):
+    def __init__(
+        self, captions, output_size, image_key="image", caption_key="txt", n_gpus=1
+    ):
         """Returns only captions with dummy images"""
         self.output_size = output_size
         self.image_key = image_key
@@ -310,7 +339,7 @@ class TextOnly(Dataset):
 
         if n_gpus > 1:
             # hack to make sure that all the captions appear on each gpu
-            repeated = [n_gpus*[x] for x in self.captions]
+            repeated = [n_gpus * [x] for x in self.captions]
             self.captions = []
             [self.captions.extend(x) for x in repeated]
 
@@ -319,18 +348,19 @@ class TextOnly(Dataset):
 
     def __getitem__(self, index):
         dummy_im = torch.zeros(3, self.output_size[0], self.output_size[1])
-        dummy_im = rearrange(dummy_im * 2. - 1., 'c h w -> h w c')
+        dummy_im = rearrange(dummy_im * 2.0 - 1.0, "c h w -> h w c")
         return {self.image_key: dummy_im, self.caption_key: self.captions[index]}
 
     def _load_caption_file(self, filename):
-        with open(filename, 'rt') as f:
+        with open(filename, "rt") as f:
             captions = f.readlines()
-        return [x.strip('\n') for x in captions]
-
+        return [x.strip("\n") for x in captions]
 
 
 import random
 import json
+
+
 class IdRetreivalDataset(FolderData):
     def __init__(self, ret_file, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -345,7 +375,7 @@ class IdRetreivalDataset(FolderData):
             retreived = random.choice(matches)
         else:
             retreived = key
-        filename = self.root_dir/retreived
+        filename = self.root_dir / retreived
         im = Image.open(filename).convert("RGB")
         im = self.process_im(im)
         # data["match"] = im
