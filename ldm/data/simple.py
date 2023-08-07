@@ -277,10 +277,12 @@ def hf_dataset(
     split='train',
     image_key='image',
     caption_key='txt',
+    data_dir=None,
+    cache_dir=None
     ):
     """Make huggingface dataset with appropriate list of transforms applied
     """
-    ds = load_dataset(name, split=split)
+    ds = load_dataset(name, data_dir=data_dir, cache_dir=cache_dir, split=split)
     tform = make_tranforms(image_transforms)
 
     assert image_column in ds.column_names, f"Didn't find column {image_column} in {ds.column_names}"
@@ -316,7 +318,7 @@ class TextOnly(Dataset):
         return len(self.captions)
 
     def __getitem__(self, index):
-        dummy_im = torch.zeros(3, self.output_size, self.output_size)
+        dummy_im = torch.zeros(3, self.output_size[0], self.output_size[1])
         dummy_im = rearrange(dummy_im * 2. - 1., 'c h w -> h w c')
         return {self.image_key: dummy_im, self.caption_key: self.captions[index]}
 
