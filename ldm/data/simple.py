@@ -302,10 +302,15 @@ def hf_dataset(
     caption_key="txt",
     data_dir=None,
     cache_dir=None,
+    postprocess=None,
+    **kwargs,
 ):
     """Make huggingface dataset with appropriate list of transforms applied"""
     ds = load_dataset(name, data_dir=data_dir, cache_dir=cache_dir, split=split)
     tform = make_tranforms(image_transforms)
+
+    if isinstance(postprocess, DictConfig):
+        postprocess = instantiate_from_config(postprocess)
 
     assert (
         image_column in ds.column_names
@@ -314,13 +319,23 @@ def hf_dataset(
         text_column in ds.column_names
     ), f"Didn't find column {text_column} in {ds.column_names}"
 
-    def pre_process(examples):
+    def process(examples):
         processed = {}
         processed[image_key] = [tform(im) for im in examples[image_column]]
         processed[caption_key] = examples[text_column]
+        for i, example_img in enumerate(processed[image_key]):
+            if postprocess is not None:
+                post_processed = postprocess({image_key: example_img})
+            else:
+                post_processed = {}
+            for k, v in post_processed.items():
+                if i == 0:
+                    processed[k] = []
+                processed[k].append(v)
         return processed
 
-    ds.set_transform(pre_process)
+    ds.set_transform(process)
+
     return ds
 
 
